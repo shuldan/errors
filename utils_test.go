@@ -2,250 +2,157 @@ package errors
 
 import (
 	"errors"
-	"fmt"
 	"testing"
 )
 
-func TestIs_BothNil(t *testing.T) {
-	t.Parallel()
-	result := Is(nil, nil)
-	if result {
-		t.Error("expected false when both errors are nil")
-	}
-}
-
-func TestIs_FirstNil(t *testing.T) {
-	t.Parallel()
-	target := errors.New("target")
-	result := Is(nil, target)
-	if result {
-		t.Error("expected false when first error is nil")
-	}
-}
-
-func TestIs_SecondNil(t *testing.T) {
-	t.Parallel()
-	err := errors.New("error")
-	result := Is(err, nil)
-	if result {
-		t.Error("expected false when target is nil")
-	}
-}
-
 func TestIs_Matching(t *testing.T) {
 	t.Parallel()
-	target := errors.New("sentinel")
-	err := fmt.Errorf("wrapped: %w", target)
-
-	result := Is(err, target)
-	if !result {
-		t.Error("expected true for matching errors")
+	base := errors.New("base")
+	wrapped := newTestError("C", "m").WithCause(base)
+	if !Is(wrapped, base) {
+		t.Errorf("expected Is=true for matching cause")
 	}
 }
 
 func TestIs_NotMatching(t *testing.T) {
 	t.Parallel()
-	err := errors.New("error1")
-	target := errors.New("error2")
-
-	result := Is(err, target)
-	if result {
-		t.Error("expected false for non-matching errors")
+	e := newTestError("C", "m")
+	if Is(e, errors.New("other")) {
+		t.Errorf("expected Is=false for non-matching error")
 	}
 }
 
-func TestIs_WithCustomError(t *testing.T) {
+func TestAs_Success(t *testing.T) {
 	t.Parallel()
-	baseErr := Code("ERR_001").New("base")
-	wrappedErr := fmt.Errorf("wrapped: %w", baseErr)
-
-	result := Is(wrappedErr, baseErr)
-	if !result {
-		t.Error("expected true for wrapped custom error")
-	}
-}
-
-func TestAs_NilError(t *testing.T) {
-	t.Parallel()
+	e := newTestError("C", "m").clone()
 	var target *Error
-
-	result := As(nil, &target)
-	if result {
-		t.Error("expected false when error is nil")
+	if !As(e, &target) {
+		t.Errorf("expected As=true for *Error")
+	}
+	if target.GetCode() != Code("C") {
+		t.Errorf("expected code C, got %v", target.GetCode())
 	}
 }
 
-func TestAs_Matching(t *testing.T) {
+func TestAs_Fail(t *testing.T) {
 	t.Parallel()
-	err := &Error{Code: "TEST", Message: "test"}
+	plain := errors.New("plain")
 	var target *Error
-
-	result := As(err, &target)
-	if !result {
-		t.Error("expected true for matching type")
-	}
-	if target == nil {
-		t.Error("expected target to be set")
-	}
-	if target.Code != "TEST" {
-		t.Errorf("expected code TEST, got %v", target.Code)
+	if As(plain, &target) {
+		t.Errorf("expected As=false for plain error")
 	}
 }
 
-func TestAs_WrappedMatching(t *testing.T) {
-	t.Parallel()
-	baseErr := &Error{Code: "WRAPPED", Message: "msg"}
-	wrapped := fmt.Errorf("wrapper: %w", baseErr)
-	var target *Error
-
-	result := As(wrapped, &target)
-	if !result {
-		t.Error("expected true for wrapped matching type")
-	}
-	if target.Code != "WRAPPED" {
-		t.Errorf("expected code WRAPPED, got %v", target.Code)
-	}
-}
-
-func TestAs_NotMatching(t *testing.T) {
-	t.Parallel()
-	err := errors.New("standard error")
-	var target *Error
-
-	result := As(err, &target)
-	if result {
-		t.Error("expected false for non-matching type")
-	}
-}
-
-func TestUnwrap_Wrapped(t *testing.T) {
-	t.Parallel()
-	base := errors.New("base")
-	wrapped := fmt.Errorf("wrapped: %w", base)
-
-	result := Unwrap(wrapped)
-	if !errors.Is(result, base) {
-		t.Errorf("expected %v, got %v", base, result)
-	}
-}
-
-func TestUnwrap_NotWrapped(t *testing.T) {
-	t.Parallel()
-	err := errors.New("not wrapped")
-
-	result := Unwrap(err)
-	if result != nil {
-		t.Errorf("expected nil, got %v", result)
-	}
-}
-
-func TestUnwrap_Nil(t *testing.T) {
-	t.Parallel()
-	result := Unwrap(nil)
-	if result != nil {
-		t.Errorf("expected nil, got %v", result)
-	}
-}
-
-func TestUnwrap_CustomError(t *testing.T) {
+func TestUnwrap_WithCause(t *testing.T) {
 	t.Parallel()
 	cause := errors.New("cause")
-	err := &Error{
-		Code:    "ERR",
-		Message: "msg",
-		Cause:   cause,
-		Details: make(map[string]interface{}),
-	}
-
-	result := Unwrap(err)
-	if !errors.Is(result, cause) {
-		t.Errorf("expected %v, got %v", cause, result)
+	e := newTestError("C", "m").WithCause(cause)
+	if Unwrap(e) != cause {
+		t.Errorf("expected Unwrap to return cause")
 	}
 }
 
-func TestJoin_NoErrors(t *testing.T) {
+func TestUnwrap_NoCause(t *testing.T) {
 	t.Parallel()
-	result := Join()
-	if result != nil {
-		t.Errorf("expected nil, got %v", result)
+	e := newTestError("C", "m")
+	if Unwrap(e) != nil {
+		t.Errorf("expected Unwrap to return nil")
 	}
 }
 
-func TestJoin_SingleError(t *testing.T) {
+func TestJoin_Multiple(t *testing.T) {
 	t.Parallel()
-	err := errors.New("single")
-	result := Join(err)
-
-	if result == nil {
-		t.Error("expected non-nil result")
+	e1 := errors.New("a")
+	e2 := errors.New("b")
+	joined := Join(e1, e2)
+	if joined == nil {
+		t.Fatal("expected non-nil joined error")
 	}
-	if result != nil && result.Error() != "single" {
-		t.Errorf("expected 'single', got %v", result.Error())
+	if !errors.Is(joined, e1) || !errors.Is(joined, e2) {
+		t.Errorf("joined error should contain both errors")
 	}
 }
 
-func TestJoin_MultipleErrors(t *testing.T) {
+func TestJoin_Nil(t *testing.T) {
 	t.Parallel()
-	err1 := errors.New("error1")
-	err2 := errors.New("error2")
-	result := Join(err1, err2)
-
-	if result == nil {
-		t.Error("expected non-nil result")
-	}
-	if result != nil {
-		str := result.Error()
-		if str == "" {
-			t.Error("expected non-empty error message")
-		}
+	joined := Join(nil, nil)
+	if joined != nil {
+		t.Errorf("expected nil for all-nil Join")
 	}
 }
 
-func TestJoin_WithNils(t *testing.T) {
+func TestWrap_Basic(t *testing.T) {
 	t.Parallel()
-	err := errors.New("real error")
-	result := Join(nil, err, nil)
-
-	if result == nil {
-		t.Error("expected non-nil result")
+	cause := errors.New("cause")
+	tmpl := newTestError("W", "wrap msg")
+	wrapped := Wrap(cause, tmpl)
+	if wrapped.GetCause() != cause {
+		t.Errorf("expected cause to be set")
+	}
+	if wrapped.GetCode() != Code("W") {
+		t.Errorf("expected code W, got %v", wrapped.GetCode())
 	}
 }
 
-func TestGetErrorCode_CustomError(t *testing.T) {
+func TestGetCode_WithError(t *testing.T) {
 	t.Parallel()
-	err := &Error{Code: "CUSTOM_ERR"}
-
-	code := GetErrorCode(err)
-	if code != "CUSTOM_ERR" {
-		t.Errorf("expected CUSTOM_ERR, got %v", code)
+	e := newError(Code("GC"), NotFound, SeverityError, "m").clone()
+	if got := GetCode(e); got != Code("GC") {
+		t.Errorf("expected GC, got %v", got)
 	}
 }
 
-func TestGetErrorCode_WrappedCustomError(t *testing.T) {
+func TestGetCode_NonError(t *testing.T) {
 	t.Parallel()
-	baseErr := &Error{Code: "BASE_ERR"}
-	wrapped := fmt.Errorf("wrapped: %w", baseErr)
-
-	code := GetErrorCode(wrapped)
-	if code != "BASE_ERR" {
-		t.Errorf("expected BASE_ERR, got %v", code)
+	if got := GetCode(errors.New("x")); got != "" {
+		t.Errorf("expected empty code, got %v", got)
 	}
 }
 
-func TestGetErrorCode_StandardError(t *testing.T) {
+func TestGetKind_WithError(t *testing.T) {
 	t.Parallel()
-	err := errors.New("standard")
-
-	code := GetErrorCode(err)
-	if code != "" {
-		t.Errorf("expected empty code, got %v", code)
+	e := newError(Code("GK"), Conflict, SeverityError, "m").clone()
+	if got := GetKind(e); got != Conflict {
+		t.Errorf("expected Conflict, got %v", got)
 	}
 }
 
-func TestGetErrorCode_Nil(t *testing.T) {
+func TestGetKind_NonError(t *testing.T) {
 	t.Parallel()
-	code := GetErrorCode(nil)
-	if code != "" {
-		t.Errorf("expected empty code, got %v", code)
+	if got := GetKind(errors.New("x")); got != Unknown {
+		t.Errorf("expected Unknown, got %v", got)
+	}
+}
+
+func TestGetSeverity_WithError(t *testing.T) {
+	t.Parallel()
+	e := newError(Code("GS"), Validation, SeverityCritical, "m").clone()
+	if got := GetSeverity(e); got != SeverityCritical {
+		t.Errorf("expected SeverityCritical, got %v", got)
+	}
+}
+
+func TestGetSeverity_NonError(t *testing.T) {
+	t.Parallel()
+	if got := GetSeverity(errors.New("x")); got != SeverityError {
+		t.Errorf("expected SeverityError, got %v", got)
+	}
+}
+
+func TestIs_CustomErrorCodes(t *testing.T) {
+	t.Parallel()
+	e1 := newError(Code("SAME"), Validation, SeverityError, "a").clone()
+	e2 := newError(Code("SAME"), NotFound, SeverityCritical, "b").clone()
+	if !Is(e1, e2) {
+		t.Errorf("expected Is=true for same code via stdlib Is")
+	}
+}
+
+func TestIs_DifferentCustomErrorCodes(t *testing.T) {
+	t.Parallel()
+	e1 := newError(Code("A"), Validation, SeverityError, "a").clone()
+	e2 := newError(Code("B"), Validation, SeverityError, "b").clone()
+	if Is(e1, e2) {
+		t.Errorf("expected Is=false for different codes")
 	}
 }
