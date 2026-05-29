@@ -15,7 +15,7 @@ func TestToHTTPStatus_AllKinds(t *testing.T) {
 		expect int
 	}{
 		{"Unknown", Unknown, http.StatusInternalServerError},
-		{"Validation", Validation, http.StatusBadRequest},
+		{"Validation", Validation, http.StatusUnprocessableEntity},
 		{"NotFound", NotFound, http.StatusNotFound},
 		{"Conflict", Conflict, http.StatusConflict},
 		{"DomainRule", DomainRule, http.StatusUnprocessableEntity},
