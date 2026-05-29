@@ -7,7 +7,7 @@ import (
 
 var httpStatusMap = map[Kind]int{
 	Unknown:        http.StatusInternalServerError,
-	Validation:     http.StatusBadRequest,
+	Validation:     http.StatusUnprocessableEntity,
 	NotFound:       http.StatusNotFound,
 	Conflict:       http.StatusConflict,
 	DomainRule:     http.StatusUnprocessableEntity,
